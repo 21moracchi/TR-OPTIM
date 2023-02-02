@@ -9,6 +9,7 @@ using SparseArrays
 using JuMP
 using Plots
 using HiGHS
+using Polyhedra
 const PS = ExaPF.PowerSystem
 
 
@@ -23,11 +24,14 @@ file = "/Users/leonard/opf/case5_critical_opf.m"
 polar = ExaPF.PolarForm(file)
 buffer = ExaPF.NetworkStack(polar)
 w_0 = vcat([buffer.pload, buffer.qload]...)
+load_factor = 1.139332 # load_factor critique pour le case5
+w_1 = w_0 * load_factor
 NBUS = ExaPF.get(polar, PS.NumberOfBuses())
 NGEN = ExaPF.get(polar, PS.NumberOfGenerators())
 NLINES = ExaPF.get(polar, PS.NumberOfLines())
 N_C = 2NBUS
 N_X = 2NBUS + 2NGEN
+N_W = 2NBUS
 function get_opf(; w=w_0, data=file)
     polar = ExaPF.PolarForm(data)
     buffer = ExaPF.NetworkStack(polar)
@@ -447,20 +451,105 @@ function check_MFCQ(; w=w_0, data=file)
     for i in active_set
         J_active = vcat(J_active, transpose(J[i, :]))
     end
-    n_g_active = size(active_set)[1]-N_C
+    n_g_active = size(active_set)[1] - N_C
     J_active = convert(Matrix{Float64}, J_active)
     J_C = J_active[1:N_C, :]
-    J_G_active = J_active[N_C+1 : N_C + n_g_active, :]
+    J_G_active = J_active[N_C+1:N_C+n_g_active, :]
 
     model_MFCQ = Model(HiGHS.Optimizer)
     @variable(model_MFCQ, u[1:N_X])
     for i in 1:N_C
-        @constraint(model_MFCQ, transpose(J_C[i,:])*u == 0)
+        @constraint(model_MFCQ, transpose(J_C[i, :]) * u == 0)
     end
     for i in 1:n_g_active
-        @constraint(model_MFCQ, transpose(J_G_active[i,:])*u <= -1)
+        @constraint(model_MFCQ, transpose(J_G_active[i, :]) * u <= -1)
     end
     @objective(model_MFCQ, Min, 0)
     optimize!(model_MFCQ)
+    if termination_status(model_MFCQ) == MOI.OPTIMAL
+        return true
+    else
+        return false
+    end
+end
+
+
+function check_SMFCQ(; w=w_0, data=file)
+    grad = solve_opf(w=w, data=data, get_constraints_jacobian=true)
+    opfmodel = get_opf(w=w, data=data)
+
+    ncon = JuMP.num_constraints(opfmodel; count_variable_in_set_constraints=false)
+    J = grad[:, 1:N_X]
+
+    active_set = get_active_constraints(w=w, data=data)
+
+    prim_dual = solve_opf(w=w, data=data, get_sensitivity_jacobian=false)
+    z = prim_dual[N_X+N_W+1:N_X+N_W+ncon] #multiplicateurs associés aux contraintes égalité puis inégalité
+    print(z)
+    model_SMFCQ = Model(HiGHS.Optimizer)
+    @variable(model_SMFCQ, u[1:N_X])
+
+    for i in active_set
+        if i <= N_C || abs(z[i]) > 1e-5 #si c'est une contrainte égalité ou une contrainte fortement active
+            @constraint(model_SMFCQ, transpose(J[i, :]) * u == 0)
+
+        else
+            print("ok")
+            @constraint(model_SMFCQ, transpose(J[i, :]) * u <= -1)
+        end
+    end
+
+    @objective(model_SMFCQ, Min, 0)
+    optimize!(model_SMFCQ)
     return JuMP.value.(u)
+end
+
+function polyhedra(; w=w_0, data=file)
+    opfmodel = get_opf(w=w, data=data)
+    set_silent(opfmodel)
+    optimize!(opfmodel)
+    nvar = JuMP.num_variables(opfmodel)
+    ncon = JuMP.num_constraints(opfmodel; count_variable_in_set_constraints=false)
+
+    # Get MOI model sent to Ipopt
+    moi_model = JuMP.backend(opfmodel)
+    ipopt_model = moi_model.optimizer.model
+
+
+    # Current primal solution
+    x = Float64[MOI.get(moi_model, MOI.VariablePrimal(), MOI.VariableIndex(vi)) for vi in 1:nvar]
+
+    # Current dual solution
+    y =  MOI.get(ipopt_model, MOI.NLPBlockDual())
+    y = -y #our convention
+    # Gradient
+    grad = zeros(nvar)
+    MOI.eval_objective_gradient(ipopt_model, grad, x)
+    # Constraints
+    cons = zeros(ncon)
+    MOI.eval_constraint(ipopt_model, cons, x)
+    n_g = ncon-N_C
+    #Jacobian
+    jac_struct = MOI.jacobian_structure(ipopt_model)
+    i_jac = [j[1] for j in jac_struct]
+    j_jac = [j[2] for j in jac_struct]
+    nnzj = length(i_jac)
+    v_jac = zeros(nnzj)
+    MOI.eval_constraint_jacobian(ipopt_model, v_jac, x)
+    J = Matrix(sparse(i_jac, j_jac, v_jac))
+
+    J_x = J[:, 1:N_X]
+    D = Diagonal(cons[N_C+1:ncon])
+    D = hcat(zeros(n_g,N_C),D)
+    A_1 = vcat(transpose(J_x),D)
+    b_1 = -  vcat(grad[1:N_X],zeros(n_g))
+    P_1 = hrep(A_1,b_1, BitSet(1:N_X + n_g))
+    A_2 = hcat(zeros(n_g,N_C),Diagonal(ones(n_g)))
+
+    b_2 = zeros(n_g)
+    P_2 = hrep(-A_2,b_2)
+
+    P = P_1 ∩ P_2
+    P = polyhedron(P)
+    return vrep(P)
 end
