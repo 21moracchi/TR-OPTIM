@@ -552,7 +552,7 @@ function polyhedra(; w=w_0, data=file)
      + sum(J_x[N_C+i,:]*z[i] for i in 1:n_g) + grad[1:N_X].==0)
     for i in 1:n_g
         @constraint(lin_model, cons[N_C+i]*z[i] ==0)
-        @consraint(lin_model, z[i] >=0)
+        @constraint(lin_model, z[i] >=0)
     end
     
     @objective(lin_model,Min,0)
@@ -561,7 +561,7 @@ function polyhedra(; w=w_0, data=file)
 
     poly = polyhedron(lin_model, CDDLib.Library(:exact))
 
-    optimize!(lin_model)
+    #optimize!(lin_model)
     vrep(poly)
     
 end
