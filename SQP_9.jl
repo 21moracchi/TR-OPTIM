@@ -552,8 +552,9 @@ function polyhedra(; w=w_0, data=file)
      + sum(J_x[N_C+i,:]*z[i] for i in 1:n_g) + grad[1:N_X].==0)
     for i in 1:n_g
         @constraint(lin_model, cons[N_C+i]*z[i] ==0)
+        @consraint(lin_model, z[i] >=0)
     end
-
+    
     @objective(lin_model,Min,0)
 
     #JuMP.set_optimizer_attribute(opfmodel, "tol", 1e-1)
