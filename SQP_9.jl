@@ -11,17 +11,18 @@ using Plots
 using HiGHS
 using Polyhedra
 using CDDLib
+using LaTeXStrings
 const PS = ExaPF.PowerSystem
 
 
 
 constraint_index(cons::Vector{NonlinearConstraintRef{ScalarShape}}) = getfield.(JuMP.index.(cons), :value)
-file = "/Users/leonard/opf/case9.m"
+#file = "/Users/leonard/opf/case9.m"
 #file = "/Users/leonard/opf/pglib_opf_case14_ieee__api.m"
 #file = "/Users/leonard/opf/pglib_opf_case14_ieee.m"
 #file = "/Users/leonard/opf/case14.m"
 
-#file = "/Users/leonard/opf/case5_critical_opf.m"
+file = "/Users/leonard/opf/case5_critical_opf.m"
 polar = ExaPF.PolarForm(file)
 buffer = ExaPF.NetworkStack(polar)
 w_0 = vcat([buffer.pload, buffer.qload]...)
@@ -33,6 +34,12 @@ NLINES = ExaPF.get(polar, PS.NumberOfLines())
 N_C = 2NBUS
 N_X = 2NBUS + 2NGEN
 N_W = 2NBUS
+
+x_c = [2.615304394048055, 9.854626876142665e-09, 1.8000000068306052, 1.5089721452039435, 1.5107513979100616e-09, 1.13840668720261, 2.4585048970061872e-08, 1.500000022913465, 0.5209280611395186, 3.852929057151792e-09, 1.0500003343970223, 0.9499996286190487, 1.049656489901429, 1.050000101176089, 0.9962415371635135, -1.169383592929008, -1.3094485371191, -1.2342555657720744, -1.1778664571949722, -1.2513778588833584, 0.92285892, 1.62924476, 1.07097208, 0.99121884, 1.20769192, 0.42155284, 0.854499, 0.58105932, 0.42155284, 0.569666]
+
+y_c = [-543060.8796857579, -11815476986.996782, -4264872167.3605523, -915383.2870773544, -1689979463.1183052, -3.4281061260832822e-06, -29733120430.007057, -14478093003.212645, -6.9543424289791724e-06, -4553078798.200016, -2.4707197651038695e-06, -2.0859999287756096e-06, -1.8482376189047735e-06, -1.8072002350862042e-06, -1.8021910100100372e-06, -2.2608864531466414e-06, -2.3338951360472733e-06, -2.140430167460519e-06, -1.8484164712018849e-06, -1.8070563582008217e-06, -1.7975511410092602e-06, -2.3169431234289117e-06, -0.000873593136274457, -11815477956.910263, -4264112167.3578258, -0.0, -1689985455.9990644, -2.895163730804003e-06, -969.9134817346932, -5.363986783935588e-06, -8.778721722862993e-06, -5992.880759091349, -7.72304883266667e-06, -29733120821.141308, -14478093003.212648, -1.0816809586791887e-05, -4553081240.655457, -3.500256798366805e-06, -391.1342527717352, -3.3293710936689615e-06, -4.778152498352236e-06, -2442.455440701451, -9.655143952090981e-05, -237089573285.09555, -9.51703922041367e-05, -9.655019920743077e-05, -0.00020767934952760074, -212782254491.90118, -9.655107154099313e-05, -0.17238132623176805, -64349713300.20704, -0.00018043116485910295]
+
+
 function get_opf(; w=w_0, data=file)
     polar = ExaPF.PolarForm(data)
     buffer = ExaPF.NetworkStack(polar)
@@ -292,8 +299,8 @@ function solve_opf(; w=w_0, data=file, get_sensitivity_jacobian=true, get_termin
             for i in 1:dim_g
                 gi = cons[i+dim_c]
 
-                is_active = gi > -1e-5
-                is_mult_null = abs(y[i+dim_c]) < 1e-5
+                is_active = gi > -1e-7
+                is_mult_null = abs(y[i+dim_c]) < 1e-7
                 if is_active & !is_mult_null
                     @constraint(sqp, dot(g_x[i, :], dx) + dot(g_w[i, :], variation) == 0.0)
                 else
@@ -315,15 +322,15 @@ function solve_opf(; w=w_0, data=file, get_sensitivity_jacobian=true, get_termin
 
         function jacobian_computation() #returns the jacobian with respect to the parameters
             dwi = zeros(nw)
-            dwi[1] = 0.0001
+            dwi[1] = 1e-5
             jacobian = sensitivity(dwi)
             for i in 2:nw
                 var_coeff_i = zeros(nw)
-                var_coeff_i[i] = 0.0001
+                var_coeff_i[i] = 1e-5
                 jacobian = hcat(jacobian, sensitivity(var_coeff_i))
 
             end
-            return 10000 * jacobian
+            return 1e5* jacobian
         end
 
         return jacobian_computation()
@@ -343,10 +350,10 @@ function inf_point(; starting_point=w_0, direction=w_0, data=file)
 end
 
 
-w_limit = [0.0, 0.0, 0.0, 0.0, 1.9632599999998979, 0.0, 2.1813999999998863,
- 0.0, 2.726749999999858, 0.0, 0.0, 0.0, 0.0, 0.6544199999999658, 0.0, 0.7634899999999601, 0.0, 1.0906999999999432]
+#w_limit = [0.0, 0.0, 0.0, 0.0, 1.9632599999998979, 0.0, 2.1813999999998863, 0.0, 2.726749999999858, 0.0, 0.0, 0.0, 0.0, 0.6544199999999658, 0.0, 0.7634899999999601, 0.0, 1.0906999999999432]
 #case14_api : 
 #w_limit = [0.92285892, 1.62924476, 1.07097208, 0.99121884, 1.20769192, 0.42155284, 0.854499, 0.58105932, 0.42155284, 0.569666]
+w_limit = w_1
 function get_active_constraints(; w=w_0, data=file)
     opf_model = get_opf(w=w, data=data)
     set_silent(opf_model)
@@ -376,7 +383,7 @@ function rank_jacobian(; w=w_0, data=file)
     end
     J_active = convert(Matrix{Float64}, J_active)
 
-    return rank(J_active, atol=0.00001) / size(active_set)[1]
+    return rank(J_active, atol=10e-4) / size(active_set)[1]
 end
 
 function plot_price(; w=w_0, data=file)
@@ -394,10 +401,11 @@ function plot_price(; w=w_0, data=file)
     end
     L = convert(Matrix{Float64}, L)
     plot(T, abs.(L), yaxis=:log)
+    
 end
 
 function plot_jacobian(; w=w_0, data=file)
-    T = range(0.95, 1.1, length=50)
+    T = range(0.6, 1.05, length=40)
     W = []
     for t in T
         push!(W, t * w_limit + (1 - t) * w)
@@ -407,7 +415,11 @@ function plot_jacobian(; w=w_0, data=file)
     for w in W
         push!(R, rank_jacobian(w=w, data=data))
     end
-    plot(T, R)
+    plot(T, R, label = L"rank(tp_{limit})",lw = 1, dpi=300)
+    xlabel!(L"t")
+    xticks!(0.95:0.01:1.1)
+    savefig("plot_jacobian.png")
+    
 end
 
 
@@ -425,7 +437,7 @@ function SVD_jacobian(; w=w_0, data=file)
 end
 
 function plot_min_SVD(; w=w_0, data=file)
-    T = range(0.5, 1.2, length=50)
+    T = range(0.95, 1.05, length=10)
     W = []
     for t in T
         push!(W, t * w_limit + (1 - t) * w)
@@ -435,11 +447,38 @@ function plot_min_SVD(; w=w_0, data=file)
         push!(L, minimum(abs.(SVD_jacobian(w=w, data=data))))
     end
 
-    plot(T, L, yaxis=:log)
+    plot(T, L, yaxis=:log,label = "Minimal value of the SVD",dpi=300)
+    xlabel!(L"t")
+    
+    xticks!(0.95:0.01:1.05)
 
 end
 
+function double_plot(; w=w_0,data= file)
+    T = range(0.95, 1.05, length=100)
+    W = []
+    for t in T
+        push!(W, t * w_limit + (1 - t) * w)
+    end
 
+    R = []
+    for w in W
+        push!(R, rank_jacobian(w=w, data=data))
+    end
+
+    L = []
+    for w in W
+        push!(L, minimum(abs.(SVD_jacobian(w=w, data=data))))
+    end
+    
+    
+    plot(T,R, label = "Normalized rank", color = :red, legend = :topleft, ylims = (0.92,1.02),dpi = 300 )
+    vline!([1,1], label = "Feasibility border",color = :black)
+    p = twinx()
+    plot!(p,T,L,yaxis =:log, label = "Minimal value of the SVD", color = :blue, legend = :topright,xlabel = L"t", dpi=300)
+    
+    savefig("double_plot.png")
+end
 #J = solve_opf(w=w_0)
 
 function check_MFCQ(; w=w_0, data=file)
@@ -506,9 +545,40 @@ function check_SMFCQ(; w=w_0, data=file)
     return JuMP.value.(u)
 end
 
+
+function get_primal_dual_solution(moi_model, ipopt_model, nvar, ncon)
+    x = Float64[MOI.get(moi_model, MOI.VariablePrimal(), MOI.VariableIndex(vi)) for vi in 1:nvar]
+    y =  MOI.get(ipopt_model, MOI.NLPBlockDual())
+    y = -y #our convention
+    return x,y
+end
+
+function get_constraint_jacobian(x,ipopt_model)
+    jac_struct = MOI.jacobian_structure(ipopt_model)
+    i_jac = [j[1] for j in jac_struct]
+    j_jac = [j[2] for j in jac_struct]
+    nnzj = length(i_jac)
+    v_jac = zeros(nnzj)
+    MOI.eval_constraint_jacobian(ipopt_model, v_jac, x)
+    J = Matrix(sparse(i_jac, j_jac, v_jac))
+    return J
+end
+
+function get_gradient(x,ipopt_model,nvar)
+    grad = zeros(nvar)
+    MOI.eval_objective_gradient(ipopt_model, grad, x)
+    return grad
+end
+
+function get_constraints_value(x,ncon,ipopt_model)
+    cons = zeros(ncon)
+    MOI.eval_constraint(ipopt_model, cons, x)
+    return cons
+end
+
 function polyhedra(; w=w_0, data=file)
+
     opfmodel = get_opf(w=w, data=data)
-    
     set_silent(opfmodel)
     optimize!(opfmodel)
     
@@ -518,51 +588,84 @@ function polyhedra(; w=w_0, data=file)
     # Get MOI model sent to Ipopt
     moi_model = JuMP.backend(opfmodel)
     ipopt_model = moi_model.optimizer.model
-
-    # Current primal solution
-    x = Float64[MOI.get(moi_model, MOI.VariablePrimal(), MOI.VariableIndex(vi)) for vi in 1:nvar]
-    # Current dual solution
-    y =  MOI.get(ipopt_model, MOI.NLPBlockDual())
-    y = -y #our convention
-    
-    # Gradient
-    grad = zeros(nvar)
-    MOI.eval_objective_gradient(ipopt_model, grad, x)
-    # Constraints
-    cons = zeros(ncon)
-    MOI.eval_constraint(ipopt_model, cons, x)
+    #primal_dual_solution
+    x,y = get_primal_dual_solution(moi_model, ipopt_model, nvar, ncon)
+    #Gradient
+    grad = get_gradient(x,ipopt_model,nvar)
+    #Constraints
+    cons = get_constraints_value(x,ncon,ipopt_model)
     n_g = ncon-N_C
-    z = y[N_C+1:N_C+n_g]
-    y = y[1:N_C]
     #Jacobian
-    jac_struct = MOI.jacobian_structure(ipopt_model)
-    i_jac = [j[1] for j in jac_struct]
-    j_jac = [j[2] for j in jac_struct]
-    nnzj = length(i_jac)
-    v_jac = zeros(nnzj)
-    MOI.eval_constraint_jacobian(ipopt_model, v_jac, x)
-    J = Matrix(sparse(i_jac, j_jac, v_jac))
-    J_x = J[:, 1:N_X] #gradient of the constraints
+    J = get_constraint_jacobian(x,ipopt_model)
+    #Partial jacobian
+    J_x = J[:, 1:N_X] 
 
+    
+    z = y[N_C+1:N_C+n_g] #distinguishing lagrangian multipliers
+    y = y[1:N_C]
+    
     #Find multipliers 
-    lin_model = Model(Ipopt.Optimizer)
+    lin_model = Model(HiGHS.Optimizer)
     @variable(lin_model, y[1:N_C])
-    @variable(lin_model,z[1:n_g])
-    @constraint(lin_model, sum(J_x[i,:]*y[i] for i in 1:N_C)
-     + sum(J_x[N_C+i,:]*z[i] for i in 1:n_g) + grad[1:N_X].==0)
+    @variable(lin_model,z[1:n_g] >= 0)
+    @constraint(lin_model, -1e-5.<= sum(J_x[i,:]*y[i] for i in 1:N_C)
+     + sum(J_x[N_C+i,:]*z[i] for i in 1:n_g) + grad[1:N_X].<=1e-5)
+    
     for i in 1:n_g
-        @constraint(lin_model, cons[N_C+i]*z[i] ==0)
-        @constraint(lin_model, z[i] >=0)
+        @constraint(lin_model,-1e-6 <=cons[N_C+i]*z[i] <= 1e-6)
     end
     
     @objective(lin_model,Min,0)
-
-    #JuMP.set_optimizer_attribute(opfmodel, "tol", 1e-1)
+    optimize!(lin_model)
 
     poly = polyhedron(lin_model, CDDLib.Library(:exact))
-
-    #optimize!(lin_model)
     vrep(poly)
     
 end
+
+function max_multiplier(;dw=1e-5*w_0/norm(w_0),w=w_0,data=file)
+    opfmodel = get_opf(w=w, data=data)
+    set_silent(opfmodel)
+    optimize!(opfmodel)
+
+    nvar = JuMP.num_variables(opfmodel)
+    ncon = JuMP.num_constraints(opfmodel; count_variable_in_set_constraints=false)
+
+    # Get MOI model sent to Ipopt
+    moi_model = JuMP.backend(opfmodel)
+    ipopt_model = moi_model.optimizer.model
+    #primal_dual_solution (thanks to global variable)
+    if w == w_1
+        x,y = x_c,y_c
+    else 
+        x,y = get_primal_dual_solution(moi_model, ipopt_model, nvar, ncon)
+    end
+    #Gradient
+    grad = get_gradient(x,ipopt_model,nvar)
+    #Constraints
+    cons = get_constraints_value(x,ncon,ipopt_model)
+    n_g = ncon-N_C
+    #Jacobian
+    J = get_constraint_jacobian(x,ipopt_model)
+    #Partial jacobian
+    J_x = J[:, 1:N_X] 
+    J_w = J[:,N_X+1:N_X+N_W]
+
+    max_model = Model(HiGHS.Optimizer)
+    @variable(max_model, y[1:N_C])
+    @variable(max_model, z[1:n_g]>=0)
+    @objective(max_model,Max, y'*J_w[1:N_C,:]*dw + z'*J_w[N_C+1:n_g+N_C,:]*dw)
+    @constraint(max_model,  sum(J_x[i,:]*y[i] for i in 1:N_C)
+     + sum(J_x[N_C+i,:]*z[i] for i in 1:n_g) + grad[1:N_X] .== 0)
+    
+    for i in 1:n_g
+        @constraint(max_model,-1e-3 <=cons[N_C+i]*z[i] <= 1e-3)
+
+    end
+    optimize!(max_model)
+    @assert(termination_status(max_model) == MOI.OPTIMAL)
+    return JuMP.value.(-1e5*[y;z])
+end
+
+
 
